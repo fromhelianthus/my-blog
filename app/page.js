@@ -7,18 +7,56 @@ import { remark } from "remark";
 import html from "remark-html";
 import { Analytics } from "@vercel/analytics/react";
 
+// 사용자의 언어에 맞는 폴더만 탐색하는 함수
+const getFilesByLanguage = (lang) => {
+    const dir = path.join(process.cwd(), "content", lang);
+    console.log(`디렉토리 경로: ${dir}`);
+
+    if (!fs.existsSync(dir)) {
+        console.log(`폴더가 존재하지 않습니다: ${dir}`);
+        return [];
+    }
+
+    const files = fs.readdirSync(dir);
+    console.log(`경로에서 읽은 파일: ${files}`);
+
+    let mdFiles = [];
+
+    files.forEach((file) => {
+        const filePath = path.join(dir, file); // 올바른 경로 결합
+        console.log(`확인할 파일 경로: ${filePath}`);
+
+        const stat = fs.statSync(filePath); // 파일/디렉토리 여부 확인
+
+        if (stat.isDirectory()) {
+            // 디렉토리라면 재귀 호출하여 그 안의 파일을 찾는다
+            console.log(`디렉토리 발견: ${filePath}`);
+            mdFiles = [
+                ...mdFiles,
+                ...getFilesByLanguage(path.join(lang, file)), // path.join(lang, file) 대신 dir로 수정
+            ];
+        } else if (file.endsWith(".md")) {
+            // 파일이 .md 확장자라면 파일 목록에 추가
+            mdFiles.push(filePath);
+        }
+    });
+
+    return mdFiles;
+};
+
 // SSR Functional Component
 // 사용자에게는 완성된 HTML이 전송됩니다.
 export default async function HomePage() {
-    // 루트 디렉토리 내에 있는 content라는 폴더를 찾고, 파일을 배열로 읽어옵니다.
-    const files = fs.readdirSync(path.join(process.cwd(), "content"));
+    // 사용자의 언어 설정을 예시로 'en'으로 설정 (실제로는 브라우저 언어나 URL 파라미터 등을 통해 설정)
+    const userLang = "ko"; // 예시: 'en', 'ko', 등으로 동적으로 설정될 수 있음
+
+    // 선택된 언어 폴더 내의 .md 파일만 가져오기
+    const files = getFilesByLanguage(userLang);
+    console.log(`files: ${files}`);
 
     const posts = files.map((filename) => {
         const slug = filename.replace(".md", "");
-        const markdownWithMeta = fs.readFileSync(
-            path.join("content", filename),
-            "utf-8"
-        );
+        const markdownWithMeta = fs.readFileSync(filename, "utf-8"); // 경로가 올바르게 처리됨
         const { data: frontmatter } = matter(markdownWithMeta);
 
         // Markdown 콘텐츠를 HTML로 변환
@@ -37,7 +75,6 @@ export default async function HomePage() {
             title: frontmatter.title || "Untitled",
             category: frontmatter.category || "Uncategorized",
             date: frontmatter.date || "No Date",
-            // description: frontmatter.description || "No Description",
             thumbnail,
         };
     });
